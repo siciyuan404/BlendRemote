@@ -1,11 +1,10 @@
+@file:OptIn(ExperimentalLayoutApi::class)
+
 package com.blendremote.client.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -167,15 +166,14 @@ private fun ViewPanel(vm: BlendRemoteViewModel) {
 
 @Composable
 private fun FlowRowButtons(items: List<String>, onClick: (String) -> Unit) {
-    // 自适应列宽的按钮网格
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 88.dp),
+    // 自适应换行的按钮流(非滚动,避免与父 verticalScroll 嵌套导致崩溃)
+    FlowRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        items(items) { item ->
-            OutlinedButton(onClick = { onClick(item) }, modifier = Modifier.fillMaxWidth()) {
+        items.forEach { item ->
+            OutlinedButton(onClick = { onClick(item) }, modifier = Modifier.widthIn(min = 88.dp)) {
                 Text(item)
             }
         }
@@ -194,14 +192,13 @@ private fun ObjectPanel(vm: BlendRemoteViewModel) {
     ) {
         Text("模式", style = MaterialTheme.typography.titleSmall)
         Spacer(Modifier.height(8.dp))
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(3),
+        FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            items(MODES) { mode ->
-                OutlinedButton(onClick = { vm.setMode(mode) }, modifier = Modifier.fillMaxWidth()) {
+            MODES.forEach { mode ->
+                OutlinedButton(onClick = { vm.setMode(mode) }, modifier = Modifier.widthIn(min = 96.dp)) {
                     Text(mode)
                 }
             }
@@ -214,14 +211,13 @@ private fun ObjectPanel(vm: BlendRemoteViewModel) {
         Spacer(Modifier.height(16.dp))
         Text("添加对象", style = MaterialTheme.typography.titleSmall)
         Spacer(Modifier.height(8.dp))
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(3),
+        FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            items(OBJECT_TYPES) { type ->
-                OutlinedButton(onClick = { vm.objectAdd(type) }, modifier = Modifier.fillMaxWidth()) {
+            OBJECT_TYPES.forEach { type ->
+                OutlinedButton(onClick = { vm.objectAdd(type) }, modifier = Modifier.widthIn(min = 96.dp)) {
                     Text(type)
                 }
             }
