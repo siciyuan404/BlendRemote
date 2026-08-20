@@ -39,6 +39,7 @@ enum class ControlTab(val label: String) {
     CUSTOM("自定义"),
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ControlScreen(
     vm: BlendRemoteViewModel,

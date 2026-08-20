@@ -64,13 +64,14 @@ fun ConnectScreen(
     }
 
     // 配对弹窗
-    LaunchedEffect(pairingRequired) {
-        showPinDialog = pairingRequired != null
+    val pendingPairing = pairingRequired
+    LaunchedEffect(pendingPairing) {
+        showPinDialog = pendingPairing != null
     }
 
-    if (showPinDialog && pairingRequired != null) {
+    if (showPinDialog && pendingPairing != null) {
         PinDialog(
-            errorMessage = pairingRequired.errorMessage,
+            errorMessage = pendingPairing.errorMessage,
             submitting = pairingSubmitting,
             onConfirm = { pin ->
                 vm.completePairing(pin)
@@ -233,13 +234,9 @@ private fun DiscoveredServerRow(
                 )
             }
             if (server.paired == true) {
-                AssistChip(onClick = {}) {
-                    Text("已配对")
-                }
+                AssistChip(onClick = {}, label = { Text("已配对") })
             } else if (server.paired == false) {
-                AssistChip(onClick = {}) {
-                    Text("未配对")
-                }
+                AssistChip(onClick = {}, label = { Text("未配对") })
             }
         }
     }

@@ -155,7 +155,7 @@ class MdnsDiscovery(
         try {
             nsdManager.resolveService(serviceInfo, resolveListener)
         } catch (e: IllegalArgumentException) {
-            pendingResolve.remove(serviceInfo.serviceName + info.serviceType)
+            pendingResolve.remove(serviceInfo.serviceName + serviceInfo.serviceType)
         }
     }
 
