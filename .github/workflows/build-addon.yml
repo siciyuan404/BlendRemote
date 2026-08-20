@@ -1,0 +1,91 @@
+name: Build Blender Addon
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'blender-addon/**'
+      - '.github/workflows/build-addon.yml'
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [main, master]
+    paths:
+      - 'blender-addon/**'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Package Addon
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Syntax check addon
+        run: |
+          python -m py_compile blender-addon/*.py
+          echo "py_compile OK"
+
+      - name: Extract version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG=${GITHUB_REF##*/}
+            VER=${TAG#v}
+            echo "VER=$VER" >> $GITHUB_OUTPUT
+          else
+            # 从 bl_info 读取版本(未打 tag 时用 0.1.0)
+            VER=$(python - <<'PY'
+import re
+src = open("blender-addon/__init__.py", encoding="utf-8").read()
+m = re.search(r'"version"\s*:\s*\((\d+),\s*(\d+),\s*(\d+)\)', src)
+if m:
+    print(f"{m.group(1)}.{m.group(2)}.{m.group(3)}")
+else:
+    print("0.1.0")
+PY
+)
+            echo "VER=$VER" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Package zip
+        run: |
+          VER=${{ steps.version.outputs.VER }}
+          mkdir -p dist/blendremote-addon
+          cp -r blender-addon/* dist/blendremote-addon/
+          # 移除测试与临时文件
+          rm -f dist/blendremote-addon/*.test.py
+          cd dist
+          zip -r "blendremote-addon-${VER}.zip" blendremote-addon
+          ls -lh
+
+      - name: Upload addon (artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: blendremote-addon
+          path: dist/*.zip
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload addon to Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
+          generate_release_notes: true
+          draft: false
+          prerelease: false

@@ -1,0 +1,27 @@
+[package]
+name = "blendremote-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "blendremote-server"
+path = "src/main.rs"
+
+[dependencies]
+blendremote-net = { path = "../../crates/net" }
+blendremote-protocol = { path = "../../crates/protocol" }
+tokio = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+clap = { workspace = true }
+base64 = { workspace = true }
+local-ip-address = "0.6"
+
+[dev-dependencies]
+tokio = { workspace = true }

@@ -1,0 +1,53 @@
+# Rust
+/target
+**/src-tauri/target
+**/*.rs.bk
+Cargo.lock
+
+# 本地 cargo 镜像配置(可选,不入库)
+/.cargo/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 构建产物
+*.exe
+*.dll
+*.so
+*.dylib
+*.pdb
+
+# Android 构建
+android/local.properties
+android/.gradle/
+android/app/build/
+android/app/src/main/jniLibs/
+android/rust-core/target/
+*.apk
+*.aab
+
+# 签名密钥(本地保存,不入库)
+/secrets/
+*.keystore
+*.keystore.p12
+*.jks
+*.key
+*.crt
+*.pem
+secrets.ps1
+artifacts/
+
+# 打包产物
+dist/
+*.blendremote.zip
+
+# Python
+__pycache__/
+*.pyc

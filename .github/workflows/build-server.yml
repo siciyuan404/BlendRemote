@@ -1,0 +1,100 @@
+name: Build Server
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'pc/server/**'
+      - 'crates/**'
+      - '.github/workflows/build-server.yml'
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [main, master]
+    paths:
+      - 'pc/server/**'
+      - 'crates/**'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build blendremote-server (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: blendremote-server-windows-x64
+            asset_suffix: windows-x64
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: blendremote-server-linux-x64
+            asset_suffix: linux-x64
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Inject version from tag
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          TAG=${GITHUB_REF##*/}
+          VER=${TAG#v}
+          echo "Injecting version $VER"
+          sed -i "s/^version = \".*\"/version = \"$VER\"/" Cargo.toml
+          sed -i "s/^version = \".*\"/version = \"$VER\"/" pc/server/Cargo.toml
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-server-${{ matrix.os }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: |
+            cargo-server-${{ matrix.os }}-
+
+      - name: Build release
+        run: cargo build --release -p blendremote-server
+
+      - name: Rename binary
+        shell: bash
+        run: |
+          BIN=target/release/blendremote-server${{ matrix.os == 'windows-latest' && '.exe' || '' }}
+          DST="${{ github.workspace }}/dist/blendremote-server-${{ matrix.asset_suffix }}${{ matrix.os == 'windows-latest' && '.exe' || '' }}"
+          mkdir -p "${{ github.workspace }}/dist"
+          cp "$BIN" "$DST"
+          ls -lh "$DST"
+
+      - name: Upload binary (artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: dist/*${{ matrix.asset_suffix }}*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload binary to Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*${{ matrix.asset_suffix }}*
+          generate_release_notes: true
+          draft: false
+          prerelease: false

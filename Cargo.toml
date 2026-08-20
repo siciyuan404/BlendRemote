@@ -1,0 +1,44 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/protocol",
+    "crates/net",
+    "pc/server",
+]
+# Android JNI core 单独编译(cargo-ndk),不加入默认 workspace 以避免 host 平台编译冲突
+exclude = [
+    "android/rust-core",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["BlendRemote"]
+
+[workspace.dependencies]
+# 共享依赖版本统一
+thiserror = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+bincode = "1"
+anyhow = "1"
+# 配对密钥(Ed25519)
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+rand = "0.8"
+base64 = "0.22"
+sha2 = "0.10"
+socket2 = "0.5"
+# 命令行
+clap = { version = "4", features = ["derive"] }
+# mDNS 发现
+mdns-sd = "0.11"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
