@@ -1,9 +1,13 @@
-@file:OptIn(ExperimentalLayoutApi::class)
+@file:OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 
 package com.blendremote.client.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculateCentroidSize
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,11 +19,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.blendremote.client.BlendRemoteViewModel
 import com.blendremote.client.CustomButton
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 private val VIEW_PRESETS = listOf(
@@ -111,7 +117,7 @@ private fun ViewPanel(vm: BlendRemoteViewModel) {
             .padding(16.dp)
             .verticalScroll(rememberScrollState()),
     ) {
-        // 手势板:单指拖动=旋转,双指捏合=缩放
+        // 手势板:单指拖动=旋转,双指拖动=平移(类似 Shift+中键),双指捏合=缩放
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -119,23 +125,72 @@ private fun ViewPanel(vm: BlendRemoteViewModel) {
                 .clip(RoundedCornerShape(12.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .pointerInput(Unit) {
-                    detectTransformGestures { _, pan, zoom, _ ->
-                        val dx = pan.x.toDouble()
-                        val dy = pan.y.toDouble()
-                        if (zoom != 1f && kotlin.math.abs(zoom - 1f) > 0.0005f) {
-                            // 缩放:平滑系数(与 navigation.zoom 的 exp 指数映射配合)
-                            vm.viewZoom((zoom - 1f) * 40.0)
-                        } else if (dx != 0.0 || dy != 0.0) {
-                            // 旋转
-                            vm.viewOrbit(dx * 0.4, dy * 0.4)
+                    awaitEachGesture {
+                        val down = awaitFirstDown()
+                        var lastCentroid: Offset? = null
+                        var lastDist = 0f
+                        var mode = 0 // 0=未定 1=旋转 2=平移 3=缩放
+
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val pressed = event.changes.count { it.pressed }
+                            if (pressed == 0) break
+
+                            val centroid = event.calculateCentroid()
+                            val dist = if (pressed >= 2) event.calculateCentroidSize() else 0f
+                            val prevCentroid = lastCentroid
+                            val prevDist = lastDist
+                            lastCentroid = centroid
+                            lastDist = dist
+
+                            if (prevCentroid == null) {
+                                // 首个采样:记录初始距离,用于区分平移 vs 缩放
+                                continue
+                            }
+
+                            val dx = (centroid.x - prevCentroid.x).toDouble()
+                            val dy = (centroid.y - prevCentroid.y).toDouble()
+                            val distDelta = dist - prevDist
+
+                            if (pressed == 1) {
+                                // 单指 → 旋转
+                                mode = 1
+                                if (dx != 0.0 || dy != 0.0) {
+                                    vm.viewOrbit(dx * 0.4, dy * 0.4)
+                                }
+                            } else {
+                                // 双指:判定平移 vs 缩放(进入模式后不切换,避免抖动)
+                                if (mode == 0) {
+                                    val distRatio = if (lastDist > 1f) {
+                                        abs(dist - lastDist) / maxOf(lastDist, 1f)
+                                    } else 0f
+                                    if (distRatio > 0.03f && abs(distDelta) > abs(dx) + abs(dy)) {
+                                        mode = 3
+                                    } else if (abs(dx) + abs(dy) > 1f) {
+                                        mode = 2
+                                    }
+                                }
+                                when (mode) {
+                                    2 -> {
+                                        if (dx != 0.0 || dy != 0.0) {
+                                            vm.viewPan(dx * 1.5, dy * 1.5)
+                                        }
+                                    }
+                                    3 -> {
+                                        if (abs(distDelta) >= 0.5f) {
+                                            vm.viewZoom(distDelta * 0.06)
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 },
             contentAlignment = Alignment.Center,
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("👆 拖动旋转", fontWeight = FontWeight.Medium)
-                Text("✌️ 双指缩放", style = MaterialTheme.typography.bodySmall)
+                Text("👆 单指旋转", fontWeight = FontWeight.Medium)
+                Text("✌️ 双指拖动平移 · 双指捏合缩放", style = MaterialTheme.typography.bodySmall)
             }
         }
 
