@@ -31,6 +31,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Windows 检出的仓库不会保留 gradlew 的执行位,Linux runner 上需显式补上
+      - name: Ensure gradlew executable
+        run: chmod +x android/gradlew android/gradlew.bat
+
       - name: Inject version from tag
         if: startsWith(github.ref, 'refs/tags/')
         shell: bash

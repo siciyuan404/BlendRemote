@@ -50,15 +50,15 @@ jobs:
           else
             # 从 bl_info 读取版本(未打 tag 时用 0.1.0)
             VER=$(python - <<'PY'
-import re
-src = open("blender-addon/__init__.py", encoding="utf-8").read()
-m = re.search(r'"version"\s*:\s*\((\d+),\s*(\d+),\s*(\d+)\)', src)
-if m:
-    print(f"{m.group(1)}.{m.group(2)}.{m.group(3)}")
-else:
-    print("0.1.0")
-PY
-)
+          import re
+          src = open("blender-addon/__init__.py", encoding="utf-8").read()
+          m = re.search(r'"version"\s*:\s*\((\d+),\s*(\d+),\s*(\d+)\)', src)
+          if m:
+              print(f"{m.group(1)}.{m.group(2)}.{m.group(3)}")
+          else:
+              print("0.1.0")
+          PY
+            )
             echo "VER=$VER" >> $GITHUB_OUTPUT
           fi
 
