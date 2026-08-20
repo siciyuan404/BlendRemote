@@ -50,6 +50,9 @@ struct State {
 
 /// 配对中状态(收到 PairRequired 后保存,等待用户输入 PIN)
 struct PendingPairing {
+    /// 保持 tokio Runtime 存活,否则后台接收循环/心跳被 drop,永远收不到 PairResponse
+    #[allow(dead_code)]
+    rt: Runtime,
     client: Arc<Client>,
     event_rx: tokio::sync::mpsc::Receiver<ClientEvent>,
     server_nonce: u64,
@@ -237,6 +240,7 @@ fn connect_internal(server_addr: &str, client_name: &str, paired: bool) -> jint 
             }
         };
         *lock_or_recover(pending()) = Some(PendingPairing {
+            rt,
             client: client.clone(),
             event_rx,
             server_nonce,
