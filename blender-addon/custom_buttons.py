@@ -9,7 +9,10 @@ import bpy
 
 
 def _prefs():
-    return bpy.context.preferences.addons.get(__package__.split(".")[0])
+    addon = bpy.context.preferences.addons.get(__package__.split(".")[0])
+    if addon is None:
+        return None
+    return getattr(addon, "preferences", None)
 
 
 def _buttons():

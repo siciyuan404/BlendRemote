@@ -67,8 +67,9 @@ jobs:
           VER=${{ steps.version.outputs.VER }}
           mkdir -p dist/blendremote-addon
           cp -r blender-addon/* dist/blendremote-addon/
-          # 移除测试与临时文件
+          # 移除测试与临时文件(py_compile 产生的 __pycache__ 等)
           rm -f dist/blendremote-addon/*.test.py
+          rm -rf dist/blendremote-addon/__pycache__
           cd dist
           zip -r "blendremote-addon-${VER}.zip" blendremote-addon
           ls -lh

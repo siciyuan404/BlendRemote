@@ -12,7 +12,7 @@
 bl_info = {
     "name": "BlendRemote - 手机远程控制",
     "author": "BlendRemote",
-    "version": (0, 1, 0),
+    "version": (0, 1, 2),
     "blender": (3, 6, 0),
     "location": "3D 视图 > 侧边栏 > BlendRemote",
     "description": "用手机远程控制 Blender:视图/对象/动画/渲染/自定义按钮",
@@ -195,7 +195,7 @@ _timer_handle = None
 def _main_timer():
     """主线程周期回调:执行命令队列 + 刷新状态 + 刷新配对缓存。"""
     bridge.executor.process()
-    prefs = bpy.context.preferences.addons.get(__package__)
+    prefs = _prefs()
     if prefs is not None and ServerManager.is_running():
         refresh_pairing_cache(prefs.server_port)
     return 0.25
@@ -232,7 +232,7 @@ class BLENDREMOTE_OT_start_server(bpy.types.Operator):
     bl_description = "启动 blendremote-server 守护进程"
 
     def execute(self, context):
-        prefs = context.preferences.addons.get(__package__)
+        prefs = _prefs(context)
         ok, msg = ServerManager.start(prefs.server_path, prefs.server_port, prefs.bridge_port)
         self.report({"INFO"} if ok else {"ERROR"}, msg)
         return {"FINISHED"}
@@ -255,7 +255,7 @@ class BLENDREMOTE_OT_refresh_pin(bpy.types.Operator):
     bl_description = "生成新的 6 位配对 PIN(旧 PIN 立即失效)"
 
     def execute(self, context):
-        prefs = context.preferences.addons.get(__package__)
+        prefs = _prefs(context)
         url = f"http://127.0.0.1:{prefs.server_port + 5}/pairing/refresh"
         try:
             req = urllib.request.Request(url, method="POST")
@@ -273,7 +273,7 @@ class BLENDREMOTE_OT_reset_pairing(bpy.types.Operator):
     bl_description = "清空所有已配对手机"
 
     def execute(self, context):
-        prefs = context.preferences.addons.get(__package__)
+        prefs = _prefs(context)
         url = f"http://127.0.0.1:{prefs.server_port + 5}/pairing/reset"
         try:
             req = urllib.request.Request(url, method="POST")
@@ -330,7 +330,7 @@ class BLENDREMOTE_PT_panel(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        prefs = context.preferences.addons.get(__package__)
+        prefs = _prefs(context)
 
         # --- 服务状态 ---
         box = layout.box()
@@ -446,6 +446,15 @@ _classes = (
 )
 
 
+def _prefs(context=None):
+    """返回 AddonPreferences 实例(Addon 对象在 .preferences 属性上)。"""
+    prefs = (context or bpy.context).preferences
+    addon = prefs.addons.get(__package__)
+    if addon is None:
+        return None
+    return getattr(addon, "preferences", None)
+
+
 def _local_ip_hint():
     """尽力返回一个本机局域网 IP(仅用于提示)。"""
     try:
@@ -483,7 +492,7 @@ def register():
     )
 
     # 启动命令桥
-    prefs = bpy.context.preferences.addons.get(__package__)
+    prefs = _prefs()
     bridge_port = prefs.bridge_port if prefs else DEFAULT_BRIDGE_PORT
     ok, msg = _start_bridge(bridge_port)
     if not ok:
