@@ -5,6 +5,7 @@ package com.blendremote.client.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateCentroid
@@ -52,7 +53,8 @@ fun ControlScreen(
     var editingButton by remember { mutableStateOf<LayoutButton?>(null) }
 
     // 首次连接后拉取布局;若尚未加载,显示加载中
-    if (layout == null) {
+    val currentLayout = layout
+    if (currentLayout == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
         }
@@ -60,7 +62,7 @@ fun ControlScreen(
     }
 
     // 当前 tab 的按钮
-    val currentButtons = layout[tab] ?: emptyList()
+    val currentButtons = currentLayout[tab] ?: emptyList()
 
     Scaffold(
         topBar = {
@@ -120,10 +122,10 @@ fun ControlScreen(
                 EditBar(
                     vm = vm,
                     tab = tab,
-                    layout = layout,
+                    layout = currentLayout,
                     onAdd = {
                         // 添加默认按钮到当前页
-                        val updated = layout.toMutableMap()
+                        val updated = currentLayout.toMutableMap()
                         val list = (updated[tab] ?: emptyList()).toMutableList()
                         val newBtn = LayoutButton(
                             id = "btn_${System.currentTimeMillis()}",
@@ -301,7 +303,7 @@ private fun ButtonsPage(
 
 // ==================== 数据驱动按钮 ====================
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun LayoutButtonView(
     btn: LayoutButton,
@@ -320,9 +322,10 @@ private fun LayoutButtonView(
     val onLongClick = if (editing) { { removeButton(vm, btn) } } else { onEditLayout }
 
     Surface(
-        onClick = onClick,
-        onLongClick = onLongClick,
-        modifier = Modifier.width(width).height(56.dp),
+        modifier = Modifier
+            .width(width)
+            .height(56.dp)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         shape = shape,
         color = containerColor,
         contentColor = contentColor,
