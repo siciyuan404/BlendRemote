@@ -492,6 +492,26 @@ pub extern "system" fn Java_com_blendremote_client_NativeBridge_nativeSendBlende
     env.new_string(&json).map(|s| s.into_raw()).unwrap_or(std::ptr::null_mut())
 }
 
+/// 发送 Blender 命令且不等待响应(fire-and-forget,用于高频手势)
+#[no_mangle]
+pub extern "system" fn Java_com_blendremote_client_NativeBridge_nativeSendBlenderCommandAsync(
+    mut env: JNIEnv,
+    _class: JClass,
+    method: JString,
+    params_json: JString,
+) {
+    let method: String = env.get_string(&method).map(|s| s.into()).unwrap_or_default();
+    let params: String = env.get_string(&params_json).map(|s| s.into()).unwrap_or_default();
+
+    let guard = lock_or_recover(state());
+    if let Some(s) = guard.as_ref() {
+        s.cmd_sent.fetch_add(1, Ordering::Relaxed);
+        let client = s.client.clone();
+        let rt = &s.rt;
+        let _ = rt.block_on(client.send_blender_command_async(&method, &params));
+    }
+}
+
 /// 轮询最新 Blender 状态快照 JSON(无更新时返回 "")
 #[no_mangle]
 pub extern "system" fn Java_com_blendremote_client_NativeBridge_nativePollStatus(

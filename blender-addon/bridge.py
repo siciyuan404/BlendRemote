@@ -26,6 +26,9 @@ class CommandExecutor:
         self._queue = []
         self._status = {}
         self._status_ready = False
+        # 状态刷新节流:高频执行命令,低频重建状态快照(降低 bpy 主线程开销)
+        self._last_status_time = 0.0
+        self._status_interval = 0.5
 
     def enqueue(self, method, params, timeout=8.0):
         """入队并等待主线程执行完成,返回 {"ok":..,"result":..,"error":..}。"""
@@ -42,7 +45,8 @@ class CommandExecutor:
         return item["result"]
 
     def process(self):
-        """主线程 timer 回调:执行队列 + 刷新状态缓存。"""
+        """主线程 timer 回调:执行命令队列 + 节流刷新状态缓存。"""
+        import time
         with self._lock:
             items = self._queue
             self._queue = []
@@ -53,12 +57,15 @@ class CommandExecutor:
                 item["result"] = {"ok": False, "error": f"{type(e).__name__}: {e}"}
             finally:
                 item["event"].set()
-        # 刷新状态缓存
-        snap = status_module.build_status()
-        if snap is not None:
-            with self._lock:
-                self._status = snap
-                self._status_ready = True
+        # 节流刷新状态缓存(每 status_interval 秒一次,避免高频率 timer 拖慢 Blender)
+        now = time.monotonic()
+        if now - self._last_status_time >= self._status_interval:
+            self._last_status_time = now
+            snap = status_module.build_status()
+            if snap is not None:
+                with self._lock:
+                    self._status = snap
+                    self._status_ready = True
 
     def status(self):
         with self._lock:

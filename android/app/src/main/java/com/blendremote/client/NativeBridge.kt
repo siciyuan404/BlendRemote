@@ -80,6 +80,9 @@ object NativeBridge {
      */
     external fun nativeSendBlenderCommand(method: String, paramsJson: String): String
 
+    /** 发送 Blender 命令且不等待响应(fire-and-forget,用于高频手势) */
+    external fun nativeSendBlenderCommandAsync(method: String, paramsJson: String)
+
     /** 轮询最新 Blender 状态快照 JSON(无更新时返回 "") */
     external fun nativePollStatus(): String
 
@@ -105,6 +108,15 @@ object NativeBridge {
 
     /** 发送无参数命令 */
     fun fire(method: String): Boolean = sendCommand(method).optBoolean("ok")
+
+    /** 异步发送命令(不等待响应),用于高频手势;失败静默忽略 */
+    fun sendAsync(method: String, params: JSONObject = JSONObject()) {
+        try {
+            nativeSendBlenderCommandAsync(method, params.toString())
+        } catch (e: Exception) {
+            // 高频调用,失败静默(连接断开由状态轮询感知)
+        }
+    }
 
     /** 获取最新 Blender 状态;返回 JSONObject 或 null */
     fun pollStatus(): JSONObject? {

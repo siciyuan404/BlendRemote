@@ -263,6 +263,24 @@ impl Client {
         }
     }
 
+    /// 发送 Blender 命令且不等待响应(fire-and-forget)
+    ///
+    /// 用于高频手势命令(orbit/pan/zoom 等),避免每次等待完整 RTT + 服务端执行。
+    /// 与 Moonlight/Sunshine 的低延迟输入流思路一致:只管下发,不阻塞 UI 手势。
+    pub async fn send_blender_command_async(
+        &self,
+        method: &str,
+        params: &str,
+    ) -> Result<(), NetError> {
+        let id = self.cmd_seq.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.send_control(ControlMessage::BlenderCommand {
+            id,
+            method: method.into(),
+            params: params.into(),
+        })
+        .await
+    }
+
     /// 检查 TCP 控制连接是否存活
     pub fn is_connected(&self) -> bool {
         self.is_connected.load(std::sync::atomic::Ordering::Relaxed)

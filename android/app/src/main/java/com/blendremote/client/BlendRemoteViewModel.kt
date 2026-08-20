@@ -409,13 +409,20 @@ class BlendRemoteViewModel : ViewModel() {
         }
     }
 
-    // ----- 视图 -----
+    /** 异步发送命令(不等待响应),用于高频手势,降低控制延迟 */
+    fun sendAsync(method: String, params: JSONObject = JSONObject()) {
+        viewModelScope.launch(Dispatchers.IO) {
+            NativeBridge.sendAsync(method, params)
+        }
+    }
+
+    // ----- 视图(手势类高频命令走异步,避免每次等待 RTT) -----
     fun viewOrbit(dx: Double, dy: Double) =
-        send("view3d.orbit", JSONObject().put("dx", dx).put("dy", dy))
+        sendAsync("view3d.orbit", JSONObject().put("dx", dx).put("dy", dy))
     fun viewPan(dx: Double, dy: Double) =
-        send("view3d.pan", JSONObject().put("dx", dx).put("dy", dy))
+        sendAsync("view3d.pan", JSONObject().put("dx", dx).put("dy", dy))
     fun viewZoom(delta: Double) =
-        send("view3d.zoom", JSONObject().put("delta", delta))
+        sendAsync("view3d.zoom", JSONObject().put("delta", delta))
     fun viewPreset(preset: String) =
         send("view3d.preset", JSONObject().put("preset", preset))
     fun viewTogglePersp() = fire("view3d.toggle_persp")

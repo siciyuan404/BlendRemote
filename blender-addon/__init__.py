@@ -193,12 +193,16 @@ _timer_handle = None
 
 
 def _main_timer():
-    """主线程周期回调:执行命令队列 + 刷新状态 + 刷新配对缓存。"""
+    """主线程周期回调:执行命令队列 + 刷新状态 + 刷新配对缓存。
+
+    周期 30ms:命令从入队到 bpy 执行的平均延迟约为周期一半(~15ms),
+    显著降低控制延迟(参考 Moonlight 对输入通道的低延迟要求)。
+    """
     bridge.executor.process()
     prefs = _prefs()
     if prefs is not None and ServerManager.is_running():
         refresh_pairing_cache(prefs.server_port)
-    return 0.25
+    return 0.03
 
 
 def _ensure_timer():
