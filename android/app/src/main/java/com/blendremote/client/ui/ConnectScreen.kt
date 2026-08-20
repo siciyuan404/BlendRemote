@@ -1,5 +1,10 @@
 package com.blendremote.client.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -22,10 +27,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.blendremote.client.BlendRemoteViewModel
 import com.blendremote.client.ConnectionState
 import com.blendremote.client.DiscoveredServer
 import com.blendremote.client.ServerStatus
+import com.blendremote.client.UpdateState
 import com.blendremote.client.normalizeAddress
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -50,6 +58,19 @@ fun ConnectScreen(
 
     LaunchedEffect(Unit) {
         vm.init(context)
+    }
+
+    // Android 13+: 使用 NsdManager 需要运行时授予 NEARBY_WIFI_DEVICES
+    val nearbyWifiPermission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.NEARBY_WIFI_DEVICES else null
+    val hasNearbyWifiPermission = nearbyWifiPermission == null ||
+        ContextCompat.checkSelfPermission(context, nearbyWifiPermission) == PackageManager.PERMISSION_GRANTED
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { _ -> }
+    LaunchedEffect(Unit) {
+        if (nearbyWifiPermission != null && !hasNearbyWifiPermission) {
+            permissionLauncher.launch(nearbyWifiPermission)
+        }
     }
 
     DisposableEffect(Unit) {
@@ -190,10 +211,12 @@ fun ConnectScreen(
                             onClick = { vm.connect(server.addrString) },
                         )
                     }
+                    item { UpdatePanel(vm, modifier = Modifier.fillMaxWidth()) }
                     item { Spacer(Modifier.height(24.dp)) }
                 }
             } else {
                 Spacer(Modifier.weight(1f))
+                UpdatePanel(vm, modifier = Modifier.fillMaxWidth())
             }
         }
     }
@@ -286,4 +309,114 @@ private fun PinDialog(
             }
         },
     )
+}
+
+/**
+ * 更新面板:显示版本号 + 检查更新 + 下载进度 + 安装
+ */
+@Composable
+private fun UpdatePanel(vm: BlendRemoteViewModel, modifier: Modifier = Modifier) {
+    val updateState by vm.updateState.collectAsState()
+    val currentVer = remember { vm.currentVersion() }
+
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        ),
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "v$currentVer",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                when (val s = updateState) {
+                    is UpdateState.Idle, is UpdateState.UpToDate -> {
+                        TextButton(
+                            onClick = { vm.checkForUpdate() },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                        ) {
+                            Text("检查更新", fontSize = 12.sp)
+                        }
+                    }
+                    is UpdateState.Checking -> {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("检查中...", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    is UpdateState.Available -> {
+                        Button(
+                            onClick = { vm.downloadUpdate() },
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                            shape = RoundedCornerShape(8.dp),
+                        ) {
+                            Text("下载 v${s.version}", fontSize = 12.sp)
+                        }
+                    }
+                    is UpdateState.Downloading -> {
+                        Text(
+                            "下载中 ${s.progress}%",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    is UpdateState.ReadyToInstall -> {
+                        Button(
+                            onClick = { vm.installUpdate() },
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                            shape = RoundedCornerShape(8.dp),
+                        ) {
+                            Text("安装更新", fontSize = 12.sp)
+                        }
+                    }
+                    is UpdateState.Error -> {
+                        Text(
+                            s.message,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        )
+                        TextButton(
+                            onClick = { vm.checkForUpdate() },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                        ) {
+                            Text("重试", fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+
+            // 下载进度条
+            (updateState as? UpdateState.Downloading)?.let { d ->
+                Spacer(Modifier.height(6.dp))
+                LinearProgressIndicator(
+                    progress = { d.progress / 100f },
+                    modifier = Modifier.fillMaxWidth().height(3.dp),
+                )
+            }
+
+            // 更新日志
+            (updateState as? UpdateState.Available)?.let { a ->
+                if (a.notes.isNotBlank()) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        a.notes,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 3,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
 }

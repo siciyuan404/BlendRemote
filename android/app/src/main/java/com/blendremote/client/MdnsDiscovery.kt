@@ -75,6 +75,20 @@ class MdnsDiscovery(
     private val nsdManager: NsdManager =
         context.getSystemService(Context.NSD_SERVICE) as NsdManager
 
+    /** WiFi 组播锁:保证 mDNS 组播包持续接收(部分设备/固件默认丢弃) */
+    private val wifiManager: android.net.wifi.WifiManager =
+        context.applicationContext.getSystemService(Context.WIFI_SERVICE) as android.net.wifi.WifiManager
+
+    private val multicastLock: android.net.wifi.WifiManager.MulticastLock? by lazy {
+        try {
+            wifiManager.createMulticastLock("blendremote-mdns").apply {
+                setReferenceCounted(false)
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     private val _servers = MutableStateFlow<Set<DiscoveredServer>>(emptySet())
     val servers: StateFlow<Set<DiscoveredServer>> = _servers.asStateFlow()
 
@@ -163,6 +177,7 @@ class MdnsDiscovery(
     fun startDiscovery() {
         if (discovering) return
         discovering = true
+        multicastLock?.acquire()
         try {
             nsdManager.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, discoveryListener)
         } catch (e: Exception) {
@@ -183,6 +198,10 @@ class MdnsDiscovery(
                 nsdManager.stopServiceDiscovery(discoveryListener)
             } catch (e: IllegalArgumentException) {
             }
+        }
+        try {
+            multicastLock?.release()
+        } catch (e: Exception) {
         }
         pollJob?.cancel()
         pollJob = null

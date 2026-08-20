@@ -346,14 +346,15 @@ pub extern "system" fn Java_com_blendremote_client_NativeBridge_nativeCompletePa
     };
 
     // 发送 PairRequest,等待 PairResponse(通过 PendingPairing 保存的事件通道接收)
+    // 注意:send_pair_request 是 async,必须 block_on 真正轮询发送,否则 Future 被丢弃、消息根本没发出
     let mut event_rx = pp.event_rx;
-    let _ = pp.client.send_pair_request(
+    let _ = pp.rt.block_on(pp.client.send_pair_request(
         pubkey,
         pp.client_name.clone(),
         pin,
         pp.server_nonce,
         signature,
-    );
+    ));
 
     // 等待配对响应(最长 8s)
     let mut response = None;
