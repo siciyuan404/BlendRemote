@@ -351,16 +351,15 @@ private fun CustomPanel(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
+            FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                items(customButtons) { btn ->
+                customButtons.forEach { btn ->
                     Button(
                         onClick = { vm.runCustomButton(btn.name) },
-                        modifier = Modifier.fillMaxWidth().height(72.dp),
+                        modifier = Modifier.width(150.dp).height(72.dp),
                         shape = RoundedCornerShape(10.dp),
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
