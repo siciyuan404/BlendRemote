@@ -122,13 +122,12 @@ private fun ViewPanel(vm: BlendRemoteViewModel) {
                     detectTransformGestures { _, pan, zoom, _ ->
                         val dx = pan.x.toDouble()
                         val dy = pan.y.toDouble()
-                        if (zoom != 1f) {
-                            // 缩放
-                            val delta = (zoom - 1f) * 100.0
-                            vm.viewZoom(delta)
+                        if (zoom != 1f && kotlin.math.abs(zoom - 1f) > 0.0005f) {
+                            // 缩放:平滑系数(与 navigation.zoom 的 exp 指数映射配合)
+                            vm.viewZoom((zoom - 1f) * 40.0)
                         } else if (dx != 0.0 || dy != 0.0) {
                             // 旋转
-                            vm.viewOrbit(dx * 0.3, dy * 0.3)
+                            vm.viewOrbit(dx * 0.4, dy * 0.4)
                         }
                     }
                 },

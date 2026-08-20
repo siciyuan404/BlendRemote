@@ -218,30 +218,36 @@ async fn main() -> Result<()> {
                 method,
                 params,
             } => {
-                // 转发到插件桥
-                let result = bridge.execute(&method, &params).await;
-                // 回写客户端
-                let conn = {
-                    let guard = clients.read().await;
-                    guard.get(&client_id).cloned()
-                };
-                if let Some(conn) = conn {
-                    let (ok, result_json, error) = match result {
-                        Ok((ok, result_json)) => (ok, result_json, String::new()),
-                        Err(e) => (false, String::new(), e.to_string()),
+                // 并发转发到插件桥,不阻塞事件循环。
+                // 手势类命令高频到达时,串行 await 会积压 → 延迟叠加(参考 MeowMic 触摸通道的设计:
+                // 高频输入不能等每次完整往返)。每个命令在独立 task 中执行 HTTP 请求。
+                let bridge_for_cmd = bridge.clone();
+                let clients_for_cmd = clients.clone();
+                tokio::spawn(async move {
+                    let result = bridge_for_cmd.execute(&method, &params).await;
+                    // 回写客户端
+                    let conn = {
+                        let guard = clients_for_cmd.read().await;
+                        guard.get(&client_id).cloned()
                     };
-                    let _ = conn
-                        .tx
-                        .send(ControlMessage::BlenderCommandResult {
-                            id,
-                            ok,
-                            result: result_json,
-                            error,
-                        })
-                        .await;
-                } else {
-                    tracing::warn!("命令响应失败: 客户端已断开 id={}", client_id);
-                }
+                    if let Some(conn) = conn {
+                        let (ok, result_json, error) = match result {
+                            Ok((ok, result_json)) => (ok, result_json, String::new()),
+                            Err(e) => (false, String::new(), e.to_string()),
+                        };
+                        let _ = conn
+                            .tx
+                            .send(ControlMessage::BlenderCommandResult {
+                                id,
+                                ok,
+                                result: result_json,
+                                error,
+                            })
+                            .await;
+                    } else {
+                        tracing::warn!("命令响应失败: 客户端已断开 id={}", client_id);
+                    }
+                });
             }
             ServerEvent::Error(e) => {
                 tracing::warn!("服务端事件错误: {}", e);

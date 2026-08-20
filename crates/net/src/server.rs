@@ -111,8 +111,9 @@ impl Server {
     }
 }
 
-/// 跨平台设置 TCP keepalive(Windows/Android/Linux)
+/// 跨平台设置 TCP keepalive + 禁用 Nagle(Android/Windows/Linux)
 fn set_keepalive(stream: &tokio::net::TcpStream) {
+    let _ = stream.set_nodelay(true);
     let keepalive = socket2::TcpKeepalive::new()
         .with_time(Duration::from_secs(15))
         .with_interval(Duration::from_secs(5));
