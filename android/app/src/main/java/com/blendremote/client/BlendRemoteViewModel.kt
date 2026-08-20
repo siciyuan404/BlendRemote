@@ -36,6 +36,25 @@ data class CustomButton(
     val icon: String = "",
 )
 
+/** 布局按钮定义(数据驱动渲染) */
+data class LayoutButton(
+    val id: String,
+    val label: String,
+    val method: String,
+    val params: JSONObject,
+    val style: String = "outlined",
+)
+
+/** 控制面板布局:页名 → 按钮列表 */
+typealias ControlLayout = Map<String, List<LayoutButton>>
+
+const val TAB_TOUCHPAD = "touchpad"
+const val TAB_VIEW = "view"
+const val TAB_OBJECT = "object"
+const val TAB_ANIM = "anim"
+const val TAB_RENDER = "render"
+const val TAB_CUSTOM = "custom"
+
 /** 渲染任务进度状态 */
 data class RenderState(
     val running: Boolean,
@@ -101,6 +120,9 @@ class BlendRemoteViewModel : ViewModel() {
 
     private val _updateState = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val updateState: StateFlow<UpdateState> = _updateState.asStateFlow()
+
+    private val _controlLayout = MutableStateFlow<ControlLayout?>(null)
+    val controlLayout: StateFlow<ControlLayout?> = _controlLayout.asStateFlow()
 
     private var updateChecker: UpdateChecker? = null
     private var pendingApkPath: String? = null
@@ -343,6 +365,7 @@ class BlendRemoteViewModel : ViewModel() {
     // ==================== 状态轮询 ====================
 
     private fun startStatusPolling() {
+        fetchLayout()
         statusJob?.cancel()
         statusJob = viewModelScope.launch(Dispatchers.IO) {
             while (_connectionState.value is ConnectionState.Connected) {
@@ -470,6 +493,80 @@ class BlendRemoteViewModel : ViewModel() {
 
     // ----- 自定义按钮 -----
     fun runCustomButton(name: String) = send("custom.run", JSONObject().put("name", name))
+
+    // ==================== 控制面板布局(数据驱动) ====================
+
+    /** 执行布局按钮(method + params) */
+    fun sendFromLayout(btn: LayoutButton) {
+        if (btn.method.isEmpty()) return
+        sendAsync(btn.method, btn.params)
+    }
+
+    /** 拉取控制面板布局(配置存 PC 端插件偏好设置) */
+    fun fetchLayout() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = NativeBridge.sendCommand("layout.get", JSONObject())
+            if (!result.optBoolean("ok", false)) return@launch
+            val layoutObj = result.optJSONObject("result")?.optJSONObject("layout") ?: return@launch
+            val parsed = parseLayout(layoutObj)
+            if (parsed != null) _controlLayout.value = parsed
+        }
+    }
+
+    /** 保存布局到 PC 端 */
+    fun saveLayout(layout: ControlLayout) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val payload = JSONObject()
+            for ((tab, buttons) in layout) {
+                val arr = org.json.JSONArray()
+                for (b in buttons) {
+                    arr.put(
+                        JSONObject()
+                            .put("id", b.id)
+                            .put("label", b.label)
+                            .put("method", b.method)
+                            .put("params", b.params)
+                            .put("style", b.style)
+                    )
+                }
+                payload.put(tab, arr)
+            }
+            NativeBridge.sendCommand("layout.set", JSONObject().put("layout", payload))
+            _controlLayout.value = layout
+        }
+    }
+
+    /** 恢复默认布局 */
+    fun resetLayout() {
+        viewModelScope.launch(Dispatchers.IO) {
+            NativeBridge.sendCommand("layout.reset", JSONObject())
+            fetchLayout()
+        }
+    }
+
+    private fun parseLayout(layoutObj: JSONObject): ControlLayout? {
+        val map = linkedMapOf<String, List<LayoutButton>>()
+        val keys = layoutObj.keys()
+        while (keys.hasNext()) {
+            val tab = keys.next()
+            val arr = layoutObj.optJSONArray(tab) ?: continue
+            val buttons = mutableListOf<LayoutButton>()
+            for (i in 0 until arr.length()) {
+                val b = arr.optJSONObject(i) ?: continue
+                buttons.add(
+                    LayoutButton(
+                        id = b.optString("id", "btn_$i"),
+                        label = b.optString("label", "按钮"),
+                        method = b.optString("method", ""),
+                        params = b.optJSONObject("params") ?: JSONObject(),
+                        style = b.optString("style", "outlined"),
+                    )
+                )
+            }
+            map[tab] = buttons
+        }
+        return map
+    }
 
     // ==================== 自动更新 ====================
 

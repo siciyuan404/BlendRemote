@@ -31,6 +31,7 @@ import bpy
 
 from . import bridge
 from . import custom_buttons as custom_buttons_mod
+from . import layout
 
 # ============================================================================
 # 常量
@@ -77,6 +78,11 @@ class BlendRemotePreferences(bpy.types.AddonPreferences):
         name="自定义按钮",
         description="自定义按钮列表 JSON(手机端可增删)",
         default="[]",
+    )
+    control_layout_json: bpy.props.StringProperty(
+        name="控制面板布局",
+        description="手机控制面板按钮布局 JSON(触控板/视图/对象/动画/渲染/自定义页)",
+        default="",
     )
 
     def draw(self, context):

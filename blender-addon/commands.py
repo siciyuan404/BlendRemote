@@ -11,6 +11,7 @@ import mathutils
 
 from . import navigation
 from . import custom_buttons
+from . import layout
 
 
 def _ok(result=None):
@@ -407,6 +408,31 @@ def cmd_custom_delete(params):
 
 
 # ============================================================================
+# 控制面板布局(数据驱动按钮,配置存 PC 端)
+# ============================================================================
+
+def cmd_layout_get(params):
+    return _ok({"layout": layout.get_layout()})
+
+
+def cmd_layout_set(params):
+    new_layout = params.get("layout")
+    if not isinstance(new_layout, dict):
+        return _err("layout 必须是 JSON 对象")
+    ok, err = layout.set_layout(new_layout)
+    if ok:
+        return _ok()
+    return _err(err)
+
+
+def cmd_layout_reset(params):
+    ok, err = layout.reset_layout()
+    if ok:
+        return _ok()
+    return _err(err)
+
+
+# ============================================================================
 # 通用 operator 执行(高级用户/测试用)
 # ============================================================================
 
@@ -489,6 +515,9 @@ REGISTRY = {
     "custom.run": cmd_custom_run,
     "custom.save": cmd_custom_save,
     "custom.delete": cmd_custom_delete,
+    "layout.get": cmd_layout_get,
+    "layout.set": cmd_layout_set,
+    "layout.reset": cmd_layout_reset,
     "operator": cmd_operator,
 }
 
