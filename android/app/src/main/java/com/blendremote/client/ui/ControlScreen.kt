@@ -205,7 +205,7 @@ private fun TouchpadPage(
                             val pressed = event.changes.count { it.pressed }
                             if (pressed == 0) {
                                 endPos = event.calculateCentroid()
-                                endTime = event.uptimeMillis
+                                endTime = event.changes.firstOrNull()?.uptimeMillis ?: endTime
                                 break
                             }
                             if (pressed >= 2) wasMulti = true
