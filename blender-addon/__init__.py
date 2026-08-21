@@ -12,7 +12,7 @@
 bl_info = {
     "name": "BlendRemote - 手机远程控制",
     "author": "BlendRemote",
-    "version": (0, 1, 3),
+    "version": (0, 1, 13),
     "blender": (3, 6, 0),
     "location": "3D 视图 > 侧边栏 > BlendRemote",
     "description": "用手机远程控制 Blender:视图/对象/动画/渲染/自定义按钮",
