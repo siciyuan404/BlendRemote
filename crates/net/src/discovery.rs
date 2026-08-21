@@ -45,6 +45,36 @@ fn detect_local_ipv4() -> Option<std::net::Ipv4Addr> {
     }
 }
 
+/// 枚举本机所有非回环 IPv4 地址,优先返回私有局域网地址。
+/// 不依赖外网连通性(局域网隔离环境也能正确广播),与 main.rs 的 list_local_ips 一致。
+fn detect_local_ipv4_by_interface() -> Option<std::net::Ipv4Addr> {
+    let mut candidates: Vec<std::net::Ipv4Addr> = Vec::new();
+    if let Ok(interfaces) = local_ip_address::list_afinet_netifas() {
+        for (_name, ip) in interfaces {
+            if let std::net::IpAddr::V4(v4) = ip {
+                if !v4.is_loopback() && !v4.is_link_local() {
+                    candidates.push(v4);
+                }
+            }
+        }
+    }
+    // 私有地址(192.168/16, 10/8, 172.16/12)优先
+    candidates.sort_by_key(|ip| match ip.octets()[0] {
+        192 => 0,
+        10 => 1,
+        172 => 2,
+        _ => 3,
+    });
+    candidates.into_iter().next()
+}
+
+/// 本机局域网 IPv4(供 mDNS 广播绑定地址),优先枚举网卡,回退 UDP 探测。
+fn choose_listen_ip() -> std::net::Ipv4Addr {
+    detect_local_ipv4_by_interface()
+        .or_else(detect_local_ipv4)
+        .unwrap_or(std::net::Ipv4Addr::new(127, 0, 0, 1))
+}
+
 /// 清洗 DNS 标签:仅保留 ASCII 字母数字、`-`、`_`,其余字符替换为 `-`,
 /// 并截断到 63 字节(DNS 标签上限)。
 fn sanitize_dns_label(name: &str, fallback: &str) -> String {
@@ -112,9 +142,7 @@ impl MdnsAdvertiser {
             properties.push(("pk", pk));
         }
 
-        let ip_to_register: std::net::Ipv4Addr = listen_ip
-            .or_else(detect_local_ipv4)
-            .unwrap_or(std::net::Ipv4Addr::new(127, 0, 0, 1));
+        let ip_to_register: std::net::Ipv4Addr = listen_ip.unwrap_or_else(choose_listen_ip);
         let addr_str = ip_to_register.to_string();
 
         // mdns-sd 要求服务类型带域名后缀("_blendremote._tcp.local."),

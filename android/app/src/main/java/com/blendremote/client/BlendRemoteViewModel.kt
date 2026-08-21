@@ -259,6 +259,8 @@ class BlendRemoteViewModel : ViewModel() {
             return
         }
 
+        // 尝试连接即记录到历史(下次直接点击复用,无需重输)
+        saveHistory(normalized)
         _connectionState.value = ConnectionState.Connecting
         _pairingRequired.value = null
 
@@ -502,15 +504,78 @@ class BlendRemoteViewModel : ViewModel() {
         sendAsync(btn.method, btn.params)
     }
 
-    /** 拉取控制面板布局(配置存 PC 端插件偏好设置) */
+    /** 拉取控制面板布局(配置存 PC 端插件偏好设置);失败时用本地默认布局兜底,避免 UI 死锁 */
     fun fetchLayout() {
         viewModelScope.launch(Dispatchers.IO) {
-            val result = NativeBridge.sendCommand("layout.get", JSONObject())
-            if (!result.optBoolean("ok", false)) return@launch
-            val layoutObj = result.optJSONObject("result")?.optJSONObject("layout") ?: return@launch
-            val parsed = parseLayout(layoutObj)
-            if (parsed != null) _controlLayout.value = parsed
+            var layout: ControlLayout? = null
+            try {
+                val result = NativeBridge.sendCommand("layout.get", JSONObject())
+                if (result.optBoolean("ok", false)) {
+                    layout = result.optJSONObject("result")?.optJSONObject("layout")?.let { parseLayout(it) }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "拉取布局失败: ${e.message}")
+            }
+            _controlLayout.value = layout ?: defaultLayout()
         }
+    }
+
+    /** 本地默认布局(拉取失败时兜底,避免转圈) */
+    private fun defaultLayout(): ControlLayout {
+        fun btn(
+            id: String,
+            label: String,
+            method: String,
+            style: String = "outlined",
+            p: Array<Pair<String, Any>> = emptyArray(),
+        ) = LayoutButton(id, label, method, JSONObject().apply { p.forEach { put(it.first, it.second) } }, style)
+
+        val map = linkedMapOf<String, List<LayoutButton>>()
+        map[TAB_TOUCHPAD] = listOf(
+            btn("frame_all", "框选全部", "view3d.frame_all", "filled"),
+            btn("toggle_persp", "透视", "view3d.toggle_persp"),
+            btn("shading_solid", "着色", "view3d.shading", p = arrayOf("shading" to "solid")),
+            btn("shading_wire", "线框", "view3d.shading", p = arrayOf("shading" to "wireframe")),
+            btn("preset_front", "前", "view3d.preset", p = arrayOf("preset" to "front")),
+            btn("preset_top", "顶", "view3d.preset", p = arrayOf("preset" to "top")),
+            btn("preset_camera", "相机", "view3d.preset", p = arrayOf("preset" to "camera")),
+        )
+        map[TAB_VIEW] = listOf(
+            btn("frame_all", "框选全部", "view3d.frame_all", "filled"),
+            btn("toggle_persp", "透视切换", "view3d.toggle_persp"),
+            btn("shading_solid", "实体", "view3d.shading", p = arrayOf("shading" to "solid")),
+            btn("shading_wire", "线框", "view3d.shading", p = arrayOf("shading" to "wireframe")),
+            btn("preset_front", "前", "view3d.preset", p = arrayOf("preset" to "front")),
+            btn("preset_top", "顶", "view3d.preset", p = arrayOf("preset" to "top")),
+            btn("preset_camera", "相机", "view3d.preset", p = arrayOf("preset" to "camera")),
+        )
+        map[TAB_OBJECT] = listOf(
+            btn("mode_object", "对象模式", "mode.set", "filled", p = arrayOf("mode" to "OBJECT")),
+            btn("mode_edit", "编辑模式", "mode.set", p = arrayOf("mode" to "EDIT")),
+            btn("add_cube", "立方体", "object.add", p = arrayOf("type" to "Cube")),
+            btn("add_sphere", "球体", "object.add", p = arrayOf("type" to "Sphere")),
+            btn("delete", "删除", "object.delete", "filled"),
+            btn("duplicate", "复制", "object.duplicate"),
+            btn("select_all", "全选", "object.select_all"),
+        )
+        map[TAB_ANIM] = listOf(
+            btn("play", "▶ 播放", "anim.play", "filled"),
+            btn("pause", "⏸ 暂停", "anim.pause", "filled"),
+            btn("goto_start", "⏮ 首帧", "anim.goto_start"),
+            btn("goto_end", "末帧 ⏭", "anim.goto_end"),
+            btn("key_insert", "关键帧", "anim.keyframe_insert", "filled"),
+            btn("key_prev", "◀ 上关键帧", "anim.keyframe_prev"),
+            btn("key_next", "下关键帧 ▶", "anim.keyframe_next"),
+        )
+        map[TAB_RENDER] = listOf(
+            btn("still", "渲染当前帧", "render.still", "filled"),
+            btn("animation", "渲染动画", "render.animation", "filled"),
+            btn("cancel", "取消", "render.cancel", "filled"),
+            btn("engine_eevee", "EEVEE", "render.engine", p = arrayOf("engine" to "EEVEE")),
+            btn("engine_cycles", "Cycles", "render.engine", p = arrayOf("engine" to "CYCLES")),
+        )
+        map[TAB_CUSTOM] = emptyList()
+        return map
     }
 
     /** 保存布局到 PC 端 */

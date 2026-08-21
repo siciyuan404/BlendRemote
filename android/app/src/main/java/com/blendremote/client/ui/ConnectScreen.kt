@@ -9,12 +9,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Computer
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.SettingsEthernet
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -148,6 +150,27 @@ fun ConnectScreen(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
+            Spacer(Modifier.height(8.dp))
+
+            // 历史地址:点击直接填入并连接
+            if (historyAddresses.isNotEmpty()) {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    items(historyAddresses) { addr ->
+                        AssistChip(
+                            onClick = {
+                                serverAddr = addr
+                                val name = clientName.trim().ifBlank { "Android-Client" }
+                                vm.connect(addr, name)
+                            },
+                            label = { Text(addr, fontSize = 12.sp) },
+                            leadingIcon = { Icon(Icons.Default.History, null, modifier = Modifier.size(14.dp)) },
+                        )
+                    }
+                }
+            }
             Spacer(Modifier.height(16.dp))
 
             Button(

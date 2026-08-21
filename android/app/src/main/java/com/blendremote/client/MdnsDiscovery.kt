@@ -122,8 +122,14 @@ class MdnsDiscovery(
         }
 
         override fun onServiceFound(serviceInfo: NsdServiceInfo) {
-            if (serviceInfo.serviceType != SERVICE_TYPE) return
+            // 注意:Android 部分设备上 onServiceFound 的 serviceType 可能为空或格式不同,
+            // 不能严格比对(discoverServices 本身已按类型过滤)。用 serviceName 后缀做兜底判断。
+            val typeOk = serviceInfo.serviceType.isNullOrEmpty() ||
+                serviceInfo.serviceType == SERVICE_TYPE ||
+                serviceInfo.serviceName.endsWith(SERVICE_TYPE.removeSuffix("."))
+            if (!typeOk) return
             val key = serviceInfo.serviceName + serviceInfo.serviceType
+            Log.d(TAG, "发现服务: ${serviceInfo.serviceName} type=${serviceInfo.serviceType}")
             if (pendingResolve.putIfAbsent(key, true) != null) return
             resolveService(serviceInfo)
         }
