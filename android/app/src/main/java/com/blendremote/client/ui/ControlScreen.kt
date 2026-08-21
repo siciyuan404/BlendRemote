@@ -185,18 +185,30 @@ private fun TouchpadPage(
                 .weight(1f)
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .pointerInput(Unit) {
+                    var lastTapTime = 0L
+                    var lastTapPos: Offset? = null
                     awaitEachGesture {
-                        awaitFirstDown()
+                        val down = awaitFirstDown()
+                        val downTime = down.uptimeMillis
+                        val downPos = down.position
                         var lastCentroid: Offset? = null
                         var lastDist = 0f
                         var initialDist = 0f
                         var accPan = 0.0
                         var mode = 0 // 0=未定 1=旋转 2=平移 3=缩放
+                        var wasMulti = false
+                        var endPos: Offset? = null
+                        var endTime = downTime
 
                         while (true) {
                             val event = awaitPointerEvent()
                             val pressed = event.changes.count { it.pressed }
-                            if (pressed == 0) break
+                            if (pressed == 0) {
+                                endPos = event.calculateCentroid()
+                                endTime = event.uptimeMillis
+                                break
+                            }
+                            if (pressed >= 2) wasMulti = true
 
                             val centroid = event.calculateCentroid()
                             val dist = if (pressed >= 2) event.calculateCentroidSize() else 0f
@@ -237,6 +249,16 @@ private fun TouchpadPage(
                                 }
                             }
                         }
+
+                        // 双击检测:单指、位移小、时间短 记为一次轻点;300ms 内再次轻点触发聚焦选中
+                        val displacement = endPos?.let { (it - downPos).getDistance() } ?: Float.MAX_VALUE
+                        if (!wasMulti && displacement < 30f && (endTime - downTime) < 250L) {
+                            val doubleTap = (downTime - lastTapTime) < 300L &&
+                                (lastTapPos?.let { (it - downPos).getDistance() < 60f } ?: false)
+                            lastTapTime = downTime
+                            lastTapPos = downPos
+                            if (doubleTap) vm.viewFrameSelected()
+                        }
                     }
                 },
             contentAlignment = Alignment.Center,
@@ -244,6 +266,7 @@ private fun TouchpadPage(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("👆 单指旋转", fontWeight = FontWeight.Medium)
                 Text("✌️ 双指拖动平移 · 双指捏合缩放", style = MaterialTheme.typography.bodySmall)
+                Text("👆👆 双击聚焦选中物体", style = MaterialTheme.typography.bodySmall)
             }
         }
 

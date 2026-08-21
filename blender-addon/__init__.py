@@ -12,7 +12,7 @@
 bl_info = {
     "name": "BlendRemote - 手机远程控制",
     "author": "BlendRemote",
-    "version": (0, 1, 2),
+    "version": (0, 1, 3),
     "blender": (3, 6, 0),
     "location": "3D 视图 > 侧边栏 > BlendRemote",
     "description": "用手机远程控制 Blender:视图/对象/动画/渲染/自定义按钮",
@@ -24,7 +24,9 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
+import time
 import urllib.request
 
 import bpy
@@ -32,6 +34,7 @@ import bpy
 from . import bridge
 from . import custom_buttons as custom_buttons_mod
 from . import layout
+from . import updater
 
 # ============================================================================
 # 常量
@@ -160,6 +163,16 @@ class ServerManager:
         return False, "服务未运行"
 
 
+def _resolve_server_exe(prefs):
+    """解析服务端可执行文件绝对路径;找不到返回 None。"""
+    exe = prefs.server_path if prefs is not None else ""
+    if not exe:
+        exe = shutil.which("blendremote-server")
+    if exe and os.path.isfile(exe):
+        return os.path.abspath(exe)
+    return None
+
+
 # ============================================================================
 # 服务端配对信息缓存(通过 127.0.0.1:{server_port+5}/pairing 获取)
 # ============================================================================
@@ -196,6 +209,17 @@ def pairing_cache():
 # ============================================================================
 
 _timer_handle = None
+_last_uirefresh = 0.0
+
+
+def _tag_redraw():
+    """重绘 3D 视图区域的 N 面板(更新状态可见)。"""
+    try:
+        for area in bpy.context.screen.areas:
+            if area.type == "VIEW_3D":
+                area.tag_redraw()
+    except Exception:
+        pass
 
 
 def _main_timer():
@@ -208,6 +232,21 @@ def _main_timer():
     prefs = _prefs()
     if prefs is not None and ServerManager.is_running():
         refresh_pairing_cache(prefs.server_port)
+
+    # 周期刷新更新面板(节流 ~3s),脏标记触发即时重绘
+    global _last_uirefresh
+    _dirty = updater.consume_dirty()
+    now = time.monotonic()
+    if _dirty or now - _last_uirefresh >= 3.0:
+        if _dirty:
+            _last_uirefresh = 0.0
+        prev = updater.ui.get("current_server")
+        updater.ui["current_addon"] = updater.version_str(bl_info["version"])
+        cur = updater.current_server_version(prefs.server_port) if prefs else None
+        updater.ui["current_server"] = cur or "未运行"
+        _last_uirefresh = now
+        if _dirty or cur != prev:
+            _tag_redraw()
     return 0.03
 
 
@@ -327,6 +366,170 @@ class BLENDREMOTE_OT_delete_custom_button(bpy.types.Operator):
 
 
 # ============================================================================
+# 更新(检查/更新插件/更新服务端)
+# ============================================================================
+
+
+class BLENDREMOTE_OT_check_update(bpy.types.Operator):
+    bl_idname = "blendremote.check_update"
+    bl_label = "检查更新"
+    bl_description = "检查插件与 blendremote-server 是否有新版本"
+
+    def execute(self, context):
+        if updater.ui["busy"]:
+            self.report({"WARNING"}, "已有任务在进行中")
+            return {"CANCELLED"}
+        updater.ui["current_addon"] = updater.version_str(bl_info["version"])
+        updater.ui["busy"] = True
+        updater.ui["kind"] = "check"
+        updater.ui["error"] = ""
+        updater.ui["last"] = ""
+        updater.mark_dirty()
+
+        def work():
+            return ("ok", updater.fetch_latest())
+
+        def on_main(res):
+            if res[0] == "error":
+                updater.ui["error"] = res[1]
+            else:
+                updater.ui["latest"] = res[1]
+                updater.ui["last"] = f"已检查:最新版本 v{res[1]['version']}"
+            updater.ui["busy"] = False
+            updater.ui["kind"] = ""
+            updater.mark_dirty()
+
+        updater.run_background(work, on_main)
+        self.report({"INFO"}, "正在检查更新...")
+        return {"FINISHED"}
+
+
+class BLENDREMOTE_OT_update_addon(bpy.types.Operator):
+    bl_idname = "blendremote.update_addon"
+    bl_label = "更新插件"
+    bl_description = "下载新版本插件并自动重新加载"
+
+    def execute(self, context):
+        if updater.ui["busy"]:
+            self.report({"WARNING"}, "已有任务在进行中")
+            return {"CANCELLED"}
+        latest = updater.ui.get("latest")
+        url = latest.get("addon_zip") if latest else None
+        if not url:
+            self.report({"ERROR"}, "上游未找到插件 zip,请先检查更新")
+            return {"CANCELLED"}
+
+        updater.ui["busy"] = True
+        updater.ui["kind"] = "addon"
+        updater.ui["progress"] = 0
+        updater.ui["error"] = ""
+        updater.ui["last"] = ""
+        updater.mark_dirty()
+
+        addon_dir = os.path.dirname(os.path.abspath(__file__))
+
+        def work():
+            dest = os.path.join(tempfile.mkdtemp(prefix="blendremote-upd-"), "addon.zip")
+            updater.download(
+                url, dest, progress_cb=lambda p: updater.ui.__setitem__("progress", p)
+            )
+            return ("ok", dest)
+
+        def on_main(res):
+            if res[0] == "error":
+                updater.ui["busy"] = False
+                updater.ui["kind"] = ""
+                updater.ui["error"] = res[1]
+                updater.mark_dirty()
+                return
+            try:
+                updater.extract_addon_zip(res[1], addon_dir)
+                ok, err = updater.reload_addon()
+            except Exception as e:
+                ok, err = False, f"{type(e).__name__}: {e}"
+            updater.ui["busy"] = False
+            updater.ui["kind"] = ""
+            updater.ui["progress"] = None
+            if ok:
+                updater.ui["latest"] = None
+            else:
+                updater.ui["error"] = err
+            updater.mark_dirty()
+
+        updater.run_background(work, on_main)
+        self.report({"INFO"}, "正在下载并更新插件...")
+        return {"FINISHED"}
+
+
+class BLENDREMOTE_OT_update_server(bpy.types.Operator):
+    bl_idname = "blendremote.update_server"
+    bl_label = "更新服务端(exe)"
+    bl_description = "下载新版本 blendremote-server 并替换,若更新前在运行则自动重启"
+
+    def execute(self, context):
+        if updater.ui["busy"]:
+            self.report({"WARNING"}, "已有任务在进行中")
+            return {"CANCELLED"}
+        latest = updater.ui.get("latest")
+        url = latest.get("server_win") if latest else None
+        if not url:
+            self.report({"ERROR"}, "上游未找到 Windows 服务端 exe,请先检查更新")
+            return {"CANCELLED"}
+        prefs = _prefs(context)
+        target = _resolve_server_exe(prefs)
+        if not target:
+            self.report({"ERROR"}, "找不到 blendremote-server 可执行文件,请在偏好设置指定路径")
+            return {"CANCELLED"}
+
+        was_running = ServerManager.is_running()
+        # Windows 下运行中的 exe 无法覆盖,先停止
+        if was_running:
+            ServerManager.stop()
+
+        updater.ui["busy"] = True
+        updater.ui["kind"] = "server"
+        updater.ui["progress"] = 0
+        updater.ui["error"] = ""
+        updater.ui["last"] = ""
+        updater.mark_dirty()
+
+        def work():
+            temp = os.path.join(os.path.dirname(target), ".blendremote-server.new.exe")
+            updater.download(
+                url, temp, progress_cb=lambda p: updater.ui.__setitem__("progress", p)
+            )
+            if sys.platform == "win32" and not updater.looks_like_pe(temp):
+                raise RuntimeError("下载的不是有效的 Windows 可执行文件")
+            return ("ok", temp)
+
+        def on_main(res):
+            if res[0] == "error":
+                if was_running:
+                    ServerManager.start(prefs.server_path, prefs.server_port, prefs.bridge_port)
+                updater.ui["busy"] = False
+                updater.ui["kind"] = ""
+                updater.ui["error"] = res[1]
+                updater.mark_dirty()
+                return
+            ok, err = updater.replace_exe(res[1], target)
+            if was_running:
+                ServerManager.start(prefs.server_path, prefs.server_port, prefs.bridge_port)
+            updater.ui["busy"] = False
+            updater.ui["kind"] = ""
+            updater.ui["progress"] = None
+            if ok:
+                updater.ui["last"] = "服务端已更新" + ("并重启" if was_running else "")
+                updater.ui["latest"] = None
+            else:
+                updater.ui["error"] = err
+            updater.mark_dirty()
+
+        updater.run_background(work, on_main)
+        self.report({"INFO"}, "正在下载并更新服务端...")
+        return {"FINISHED"}
+
+
+# ============================================================================
 # N-panel UI
 # ============================================================================
 
@@ -421,6 +624,40 @@ class BLENDREMOTE_PT_panel(bpy.types.Panel):
             )
             col.label(text=f"选中: {status.get('selected_count', 0)} 个对象")
 
+        # --- 更新(插件 / 服务端) ---
+        box = layout.box()
+        col = box.column(align=True)
+        s = updater.snapshot()
+        col.label(text="更新", icon="FILE_REFRESH")
+        col.label(text=f"插件版本: {s['current_addon']}")
+        col.label(text=f"服务端版本: {s['current_server']}")
+        row = col.row(align=True)
+        row.operator("blendremote.check_update", text="检查更新")
+        if s["busy"]:
+            if s["kind"] == "check":
+                col.label(text="正在检查更新...", icon="INFO")
+            else:
+                pct = f"{s['progress']}%" if s["progress"] is not None else "..."
+                what = "插件" if s["kind"] == "addon" else "服务端"
+                col.label(text=f"{what}正在更新 {pct}", icon="INFO")
+        if s["error"]:
+            col.label(text=s["error"][:70], icon="ERROR")
+        if s["last"]:
+            col.label(text=s["last"], icon="CHECKMARK")
+        latest = s.get("latest")
+        if latest:
+            col.separator()
+            col.label(text=f"发现新版本 v{latest['version']}", icon="NEW")
+            row = col.row(align=True)
+            if latest.get("addon_zip"):
+                row.operator("blendremote.update_addon", text="更新插件")
+            if latest.get("server_win"):
+                row.operator("blendremote.update_server", text="更新服务端")
+            notes = latest.get("notes") or ""
+            if notes:
+                for line in notes.splitlines()[:4]:
+                    col.label(text=line[:80], icon="BLANK1")
+
 
 class BLENDREMOTE_OT_toggle_button_form(bpy.types.Operator):
     bl_idname = "blendremote.toggle_button_form"
@@ -450,6 +687,9 @@ _classes = (
     BLENDREMOTE_OT_reset_pairing,
     BLENDREMOTE_OT_add_custom_button,
     BLENDREMOTE_OT_delete_custom_button,
+    BLENDREMOTE_OT_check_update,
+    BLENDREMOTE_OT_update_addon,
+    BLENDREMOTE_OT_update_server,
     BLENDREMOTE_OT_toggle_button_form,
     BLENDREMOTE_PT_panel,
     BlendRemoteNewButtonProps,

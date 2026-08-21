@@ -21,6 +21,8 @@ DEFAULT_LAYOUT = {
     # 触控板页:按钮列表作为手势区下方的快捷按钮栏
     "touchpad": [
         {"id": "frame_all", "label": "框选全部", "method": "view3d.frame_all", "params": {}, "style": "filled"},
+        {"id": "frame_sel", "label": "聚焦选中", "method": "view3d.frame_selected", "params": {}, "style": "filled"},
+        {"id": "reset_view", "label": "复位", "method": "view3d.reset", "params": {}, "style": "filled"},
         {"id": "toggle_persp", "label": "透视", "method": "view3d.toggle_persp", "params": {}, "style": "outlined"},
         {"id": "shading_solid", "label": "着色", "method": "view3d.shading", "params": {"shading": "solid"}, "style": "outlined"},
         {"id": "shading_wire", "label": "线框", "method": "view3d.shading", "params": {"shading": "wireframe"}, "style": "outlined"},
@@ -34,6 +36,8 @@ DEFAULT_LAYOUT = {
         {"id": "pan", "label": "平移", "method": "view3d.pan", "params": {}, "style": "outlined"},
         {"id": "zoom", "label": "缩放", "method": "view3d.zoom", "params": {}, "style": "outlined"},
         {"id": "frame_all", "label": "框选全部", "method": "view3d.frame_all", "params": {}, "style": "filled"},
+        {"id": "frame_sel", "label": "聚焦选中", "method": "view3d.frame_selected", "params": {}, "style": "filled"},
+        {"id": "reset_view", "label": "复位", "method": "view3d.reset", "params": {}, "style": "filled"},
         {"id": "toggle_persp", "label": "透视切换", "method": "view3d.toggle_persp", "params": {}, "style": "outlined"},
         {"id": "shading_solid", "label": "实体", "method": "view3d.shading", "params": {"shading": "solid"}, "style": "outlined"},
         {"id": "shading_wire", "label": "线框", "method": "view3d.shading", "params": {"shading": "wireframe"}, "style": "outlined"},

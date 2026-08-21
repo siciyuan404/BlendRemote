@@ -80,6 +80,20 @@ def cmd_view_frame_all(params):
     return _ok()
 
 
+def cmd_view_frame_selected(params):
+    ok, err = navigation.frame_selected()
+    if ok:
+        return _ok()
+    return _err(err)
+
+
+def cmd_view_reset(params):
+    ok, err = navigation.reset_view()
+    if ok:
+        return _ok()
+    return _err(err)
+
+
 # ============================================================================
 # 模式切换
 # ============================================================================
@@ -486,6 +500,8 @@ REGISTRY = {
     "view3d.toggle_persp": cmd_view_toggle_persp,
     "view3d.shading": cmd_view_shading,
     "view3d.frame_all": cmd_view_frame_all,
+    "view3d.frame_selected": cmd_view_frame_selected,
+    "view3d.reset": cmd_view_reset,
     "mode.set": cmd_mode_set,
     "mode.toggle_edit": cmd_mode_toggle_edit,
     "object.add": cmd_object_add,

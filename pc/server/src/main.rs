@@ -562,9 +562,10 @@ async fn run_serverinfo_server(
                 let connected = clients.read().await.len();
                 let uptime = monotonic_ns().saturating_sub(started_ns) / 1_000_000_000;
                 let body = format!(
-                    r#"{{"name":"BlendRemote-Server","hostname":"{}","version":{},"state":"ONLINE","connected_clients":{},"max_clients":{},"uptime_secs":{},"server_pubkey_b64":"{}"{}}}"#,
+                    r#"{{"name":"BlendRemote-Server","hostname":"{}","version":{},"app_version":"{}","state":"ONLINE","connected_clients":{},"max_clients":{},"uptime_secs":{},"server_pubkey_b64":"{}"{}}}"#,
                     hostname,
                     blendremote_net::PROTOCOL_VERSION,
+                    env!("CARGO_PKG_VERSION"),
                     connected,
                     MAX_CLIENTS,
                     uptime,

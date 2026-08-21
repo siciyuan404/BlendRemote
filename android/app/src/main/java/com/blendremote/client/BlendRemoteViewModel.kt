@@ -454,6 +454,8 @@ class BlendRemoteViewModel : ViewModel() {
     fun viewShading(shading: String) =
         send("view3d.shading", JSONObject().put("shading", shading))
     fun viewFrameAll() = fire("view3d.frame_all")
+    fun viewFrameSelected() = fire("view3d.frame_selected")
+    fun viewReset() = fire("view3d.reset")
 
     // ----- 模式 -----
     fun setMode(mode: String) = send("mode.set", JSONObject().put("mode", mode))
@@ -533,6 +535,8 @@ class BlendRemoteViewModel : ViewModel() {
         val map = linkedMapOf<String, List<LayoutButton>>()
         map[TAB_TOUCHPAD] = listOf(
             btn("frame_all", "框选全部", "view3d.frame_all", "filled"),
+            btn("frame_sel", "聚焦选中", "view3d.frame_selected", "filled"),
+            btn("reset_view", "复位", "view3d.reset", "filled"),
             btn("toggle_persp", "透视", "view3d.toggle_persp"),
             btn("shading_solid", "着色", "view3d.shading", p = arrayOf("shading" to "solid")),
             btn("shading_wire", "线框", "view3d.shading", p = arrayOf("shading" to "wireframe")),
@@ -542,6 +546,8 @@ class BlendRemoteViewModel : ViewModel() {
         )
         map[TAB_VIEW] = listOf(
             btn("frame_all", "框选全部", "view3d.frame_all", "filled"),
+            btn("frame_sel", "聚焦选中", "view3d.frame_selected", "filled"),
+            btn("reset_view", "复位", "view3d.reset", "filled"),
             btn("toggle_persp", "透视切换", "view3d.toggle_persp"),
             btn("shading_solid", "实体", "view3d.shading", p = arrayOf("shading" to "solid")),
             btn("shading_wire", "线框", "view3d.shading", p = arrayOf("shading" to "wireframe")),
